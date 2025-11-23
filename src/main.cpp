@@ -1,66 +1,71 @@
-/*!
- *@file play.ino
- *@brief Music Playing Example Program
- *@details  Experimental phenomenon: control MP3 play music, obtain song information
- *@copyright  Copyright (c) 2010 DFRobot Co.Ltd (http://www.dfrobot.com)
- *@license     The MIT license (MIT)
- *@author [fengli](li.feng@dfrobot.com)
- *@version  V1.1
- *@date  2021-10-15
- *@url https://github.com/DFRobot/DFRobot_DF1201S
- */
-
 #include <DFRobot_DF1201S.h>
-#include <SoftwareSerial.h>
+#include <HomeSpan.h>
+#include <HardwareSerial.h>
+#include <BackgroundAudioPlayer.h>
 
-// Use pins 2 and 3 to communicate with DFPlayer Mini
-static const uint8_t PIN_MP3_TX = 17; // Connects to module's RX
-static const uint8_t PIN_MP3_RX = 16; // Connects to module's TX
-SoftwareSerial DF1201SSerial(PIN_MP3_RX, PIN_MP3_TX);
+const byte RXD2 = 16; // Connects to module's RX
+const byte TXD2 = 17; // Connects to module's TX
+
+HardwareSerial dfPlayerSerial(1); // Use UART channel 1
+DFRobot_DF1201S player;           // player object
 
 // Create the Player object
 DFRobot_DF1201S player;
 
-void setup()
+void initializeDFPlayer()
 {
-  Serial.begin(115200);
-  DF1201SSerial.begin(115200);
+  Serial.begin(19200);
+  dfPlayerSerial.begin(9600, SERIAL_8N1, RXD2, TXD2);
 
   int startupCount = 1;
 
-  while (!player.begin(DF1201SSerial))
+  while (!player.begin(dfPlayerSerial))
   {
+    Serial.print("DFPlayer connection attempt ");
+    Serial.print(startupCount);
+    Serial.println(" failed. Retrying.");
 
-    if (startupCount <= 10)
-    {
-      Serial.print("Startup attempt ");
-      Serial.print(startupCount);
-      Serial.println(" failed. Retrying.");
-
-      startupCount++;
-    }
+    startupCount++;
     delay(1000);
   }
 
-  Serial.print("Startup attempt ");
+  Serial.print("DFPlayer connection attempt ");
   Serial.print(startupCount);
   Serial.println(" succeeded. Configuring settings.");
 
+  /* Configure */
   player.setPrompt(false);
   player.setVol(5);
   Serial.print("VOL:");
-  /*Get volume*/
   Serial.println(player.getVol());
-  /*Repeat current track indefinitely"*/
+  /* Repeat current track indefinitely" */
   player.setPlayMode(player.SINGLECYCLE);
+}
+
+void setup()
+{
+  Serial.begin(115200);
+  initializeDFPlayer();
+
+  // IMPORTANT: The Name you choose below MUST BE UNIQUE across all your HomeSpan devices!
+
+  homeSpan.begin(Category::Switches, "Background audio: under stairs");
+
+  // Next, we construct a simple HAP Accessory Database with a single Accessory containing 3 Services,
+  // each with their own required Characteristics.
+
+  new SpanAccessory(); // Begin by creating a new Accessory using SpanAccessory(), no arguments needed
+
+  new Service::AccessoryInformation(); // HAP requires every Accessory to implement an AccessoryInformation Service
+
+  // The only required Characteristic for the Accessory Information Service is the special Identify Characteristic.  It takes no arguments:
+
+  new Characteristic::Identify(); // Create the required Identify Characteristic
+
+  new BackgroundAudioPlayer(&player);
 }
 
 void loop()
 {
-  Serial.println("Playing");
-  player.start();
-
-  while (1)
-  {
-  }
+  homeSpan.poll();
 }
