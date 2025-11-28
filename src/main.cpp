@@ -9,13 +9,9 @@ const byte TXD2 = 17; // Connects to module's TX
 HardwareSerial dfPlayerSerial(1); // Use UART channel 1
 DFRobot_DF1201S player;           // player object
 
-// Create the Player object
-DFRobot_DF1201S player;
-
 void initializeDFPlayer()
 {
-  Serial.begin(19200);
-  dfPlayerSerial.begin(9600, SERIAL_8N1, RXD2, TXD2);
+  dfPlayerSerial.begin(115200, SERIAL_8N1, RXD2, TXD2);
 
   int startupCount = 1;
 
@@ -29,22 +25,22 @@ void initializeDFPlayer()
     delay(1000);
   }
 
-  Serial.print("DFPlayer connection attempt ");
-  Serial.print(startupCount);
-  Serial.println(" succeeded. Configuring settings.");
+  LOG0("DFPlayer connection attempt ");
+  LOG0(startupCount);
+  LOG0(" succeeded. Configuring settings.");
 
   /* Configure */
   player.setPrompt(false);
   player.setVol(5);
-  Serial.print("VOL:");
-  Serial.println(player.getVol());
+  LOG0("Volume:");
+  LOG0(player.getVol());
   /* Repeat current track indefinitely" */
   player.setPlayMode(player.SINGLECYCLE);
 }
 
 void setup()
 {
-  Serial.begin(115200);
+  Serial.begin(19200);
   initializeDFPlayer();
 
   // IMPORTANT: The Name you choose below MUST BE UNIQUE across all your HomeSpan devices!
