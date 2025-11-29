@@ -1,3 +1,4 @@
+#include "HomeSpan.h"
 #include "BackgroundAudioPlayer.h"
 
 BackgroundAudioPlayer::BackgroundAudioPlayer(HardwareSerial *dfPlayerSerial, int defaultVolume)
@@ -48,4 +49,17 @@ boolean BackgroundAudioPlayer::update()
     }
 
     return (true);
+}
+
+// Must use this initializer so that homespan initializes with an accessory before
+// invoking service constructor
+void initializeAccessory(HardwareSerial *dfPlayerSerial, const char *name, int defaultVolume)
+{
+    homeSpan.begin(Category::Switches, name);
+
+    new SpanAccessory();
+    new Service::AccessoryInformation();
+    new Characteristic::Identify();
+
+    new BackgroundAudioPlayer(dfPlayerSerial, 5);
 }

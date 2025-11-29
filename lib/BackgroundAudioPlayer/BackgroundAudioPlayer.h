@@ -20,4 +20,6 @@ struct BackgroundAudioPlayer : Service::Switch
     boolean update();
 };
 
+void initializeAccessory(HardwareSerial *dfPlayerSerial, const char *name, int defaultVolume);
+
 #endif
