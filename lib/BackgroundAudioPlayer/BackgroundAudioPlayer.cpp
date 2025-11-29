@@ -1,10 +1,26 @@
 #include "HomeSpan.h"
 #include "BackgroundAudioPlayer.h"
 
-BackgroundAudioPlayer::BackgroundAudioPlayer(HardwareSerial *dfPlayerSerial, int defaultVolume)
-    : Service::Switch(), player()
+// scale factor mapping 'color temperature' to track number
+const uint8_t TRACK_SCALE_FACTOR = 5;
+const uint8_t MAX_TRACKS = 20;
+
+BackgroundAudioPlayer::BackgroundAudioPlayer(
+    HardwareSerial *dfPlayerSerial,
+    int defaultVolume,
+    int numTracks)
+    : Service::LightBulb(), player()
 {
-    power = new Characteristic::On(false);
+    on = new Characteristic::On(false);
+
+    volume = new Characteristic::Brightness(defaultVolume);
+    volume->setRange(1, 30, 1);
+
+    track = new Characteristic::ColorTemperature(TRACK_SCALE_FACTOR);
+    track->setRange(
+        TRACK_SCALE_FACTOR,
+        MAX_TRACKS * TRACK_SCALE_FACTOR,
+        TRACK_SCALE_FACTOR);
 
     this->initializeDFPlayer(dfPlayerSerial, defaultVolume);
 }
@@ -30,6 +46,7 @@ void BackgroundAudioPlayer::initializeDFPlayer(HardwareSerial *dfPlayerSerial, i
     LOG0(" succeeded. Configuring settings.\n");
 
     player.setPrompt(false);
+    player.setLED(false);
     player.setVol(defaultVolume);
     LOG0("Volume:");
     LOG0(player.getVol());
@@ -39,27 +56,80 @@ void BackgroundAudioPlayer::initializeDFPlayer(HardwareSerial *dfPlayerSerial, i
 
 boolean BackgroundAudioPlayer::update()
 {
-    if (this->power->getNewVal())
+    if (this->on->getNewVal() != this->on->getVal())
     {
-        this->player.start();
+        if (this->on->getNewVal())
+        {
+            this->player.start();
+        }
+        else
+        {
+            this->player.pause();
+        }
     }
-    else
+
+    if (this->volume->getNewVal() != this->volume->getVal())
     {
-        this->player.pause();
+        player.setVol(this->volume->getNewVal());
     }
+
+    if (this->track->getNewVal() != this->track->getVal())
+    {
+        this->player.playSpecFile(this->getNextFile());
+    }
+
+    this->logNewState();
 
     return (true);
 }
 
+void BackgroundAudioPlayer::logNewState()
+{
+    if (this->on->getNewVal())
+    {
+        LOG0("Playing file ");
+    }
+    else
+    {
+        LOG0("Paused file ");
+    }
+
+    LOG0(this->getNextTrackNumber());
+    LOG0(".\n");
+
+    LOG0("Volume: ");
+    LOG0(this->volume->getNewVal());
+    LOG0(".\n");
+}
+
+int BackgroundAudioPlayer::getNextTrackNumber()
+{
+    int trackValue = this->track->getNewVal();
+    return (trackValue + TRACK_SCALE_FACTOR / 2) / TRACK_SCALE_FACTOR;
+}
+
+char *BackgroundAudioPlayer::getNextFile()
+{
+    return trackToFile(this->getNextTrackNumber());
+}
+
+char *trackToFile(int track)
+{
+    static char buffer[9];
+    sprintf(buffer, "%04d.mp3", track);
+
+    return buffer;
+}
+
 // Must use this initializer so that homespan initializes with an accessory before
 // invoking service constructor
-void initializeAccessory(HardwareSerial *dfPlayerSerial, const char *name, int defaultVolume)
+void initializeAccessory(HardwareSerial *dfPlayerSerial, const char *name, int defaultVolume, int numTracks)
 {
-    homeSpan.begin(Category::Switches, name);
+    homeSpan.begin(Category::Other, name);
 
     new SpanAccessory();
     new Service::AccessoryInformation();
     new Characteristic::Identify();
 
-    new BackgroundAudioPlayer(dfPlayerSerial, 5);
+    new BackgroundAudioPlayer(dfPlayerSerial, 5, numTracks);
 }
