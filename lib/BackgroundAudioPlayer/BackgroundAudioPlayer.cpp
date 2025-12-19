@@ -1,28 +1,110 @@
 #include "HomeSpan.h"
 #include "BackgroundAudioPlayer.h"
 
-// scale factor mapping 'color temperature' to track number
-const uint8_t TRACK_SCALE_FACTOR = 5;
-const uint8_t MAX_TRACKS = 20;
+// AudioPlayerLight implementation
+AudioPlayerLight::AudioPlayerLight(DFRobot_DF1201S *playerRef, int defaultVolume)
+    : Service::LightBulb()
+{
+    new Characteristic::ConfiguredName("Volume Control");
+    on = new Characteristic::On(false);
+    volume = (new Characteristic::Brightness(defaultVolume * 5))->setRange(1, 100, 5);
+    player = playerRef;
+}
 
+boolean AudioPlayerLight::update()
+{
+    if (on->getNewVal() != on->getVal())
+    {
+        if (on->getNewVal())
+        {
+            player->start();
+            LOG0(player->getFileName());
+        }
+        else
+        {
+            player->pause();
+        }
+    }
+
+    if (volume->getNewVal() != volume->getVal())
+    {
+        player->setVol(volume->getNewVal() / 5);
+    }
+
+    return true;
+}
+
+// AudioPlayerFan implementation
+AudioPlayerFan::AudioPlayerFan(DFRobot_DF1201S *playerRef, int numTracks, int defaultTrack)
+    : Service::Fan()
+{
+    new Characteristic::ConfiguredName("Track Selection");
+    active = new Characteristic::Active(1);
+
+    // Map tracks 1-numTracks to rotation speed percentage
+    // Each track gets an equal slice of the 0-100% range
+    int stepSize = 100 / numTracks;
+    int defaultSpeed = (defaultTrack - 1) * stepSize + stepSize / 2;
+
+    rotationSpeed = (new Characteristic::RotationSpeed(defaultSpeed))->setRange(0, 100, stepSize);
+
+    player = playerRef;
+    this->numTracks = numTracks;
+}
+
+boolean AudioPlayerFan::update()
+{
+    if (rotationSpeed->getNewVal() != rotationSpeed->getVal())
+    {
+        player->playSpecFile(getTrackFile());
+        logNewState();
+    }
+
+    return true;
+}
+
+int AudioPlayerFan::getTrackNumber()
+{
+    int speed = rotationSpeed->getNewVal();
+    int stepSize = 100 / numTracks;
+
+    // Convert rotation speed percentage to track number (1-based)
+    int trackNum = (speed / stepSize) + 1;
+
+    // Clamp to valid range
+    if (trackNum < 1)
+        trackNum = 1;
+    if (trackNum > numTracks)
+        trackNum = numTracks;
+
+    return trackNum;
+}
+
+char *AudioPlayerFan::getTrackFile()
+{
+    return trackToFile(getTrackNumber());
+}
+
+void AudioPlayerFan::logNewState()
+{
+    LOG0("Changing to track ");
+    LOG0(getTrackNumber());
+    LOG0(" (rotation speed: ");
+    LOG0(rotationSpeed->getNewVal());
+    LOG0("%).\n");
+    LOG0("File name: ");
+    LOG0(trackToFile(getTrackNumber()));
+    LOG0("\n");
+}
+
+// BackgroundAudioPlayer implementation
 BackgroundAudioPlayer::BackgroundAudioPlayer(
     HardwareSerial *dfPlayerSerial,
     int defaultVolume,
     int numTracks)
-    : Service::LightBulb(), player()
+    : player()
 {
-    on = new Characteristic::On(false);
-
-    volume = new Characteristic::Brightness(defaultVolume);
-    volume->setRange(1, 30, 1);
-
-    track = new Characteristic::ColorTemperature(TRACK_SCALE_FACTOR);
-    track->setRange(
-        TRACK_SCALE_FACTOR,
-        MAX_TRACKS * TRACK_SCALE_FACTOR,
-        TRACK_SCALE_FACTOR);
-
-    this->initializeDFPlayer(dfPlayerSerial, defaultVolume);
+    initializeDFPlayer(dfPlayerSerial, defaultVolume);
 }
 
 void BackgroundAudioPlayer::initializeDFPlayer(HardwareSerial *dfPlayerSerial, int defaultVolume)
@@ -54,69 +136,10 @@ void BackgroundAudioPlayer::initializeDFPlayer(HardwareSerial *dfPlayerSerial, i
     player.setPlayMode(player.SINGLECYCLE);
 }
 
-boolean BackgroundAudioPlayer::update()
-{
-    if (this->on->getNewVal() != this->on->getVal())
-    {
-        if (this->on->getNewVal())
-        {
-            this->player.start();
-        }
-        else
-        {
-            this->player.pause();
-        }
-    }
-
-    if (this->volume->getNewVal() != this->volume->getVal())
-    {
-        player.setVol(this->volume->getNewVal());
-    }
-
-    if (this->track->getNewVal() != this->track->getVal())
-    {
-        this->player.playSpecFile(this->getNextFile());
-    }
-
-    this->logNewState();
-
-    return (true);
-}
-
-void BackgroundAudioPlayer::logNewState()
-{
-    if (this->on->getNewVal())
-    {
-        LOG0("Playing file ");
-    }
-    else
-    {
-        LOG0("Paused file ");
-    }
-
-    LOG0(this->getNextTrackNumber());
-    LOG0(".\n");
-
-    LOG0("Volume: ");
-    LOG0(this->volume->getNewVal());
-    LOG0(".\n");
-}
-
-int BackgroundAudioPlayer::getNextTrackNumber()
-{
-    int trackValue = this->track->getNewVal();
-    return (trackValue + TRACK_SCALE_FACTOR / 2) / TRACK_SCALE_FACTOR;
-}
-
-char *BackgroundAudioPlayer::getNextFile()
-{
-    return trackToFile(this->getNextTrackNumber());
-}
-
 char *trackToFile(int track)
 {
-    static char buffer[9];
-    sprintf(buffer, "%04d.mp3", track);
+    static char buffer[14];
+    sprintf(buffer, "/mp3/%04d.mp3", track);
 
     return buffer;
 }
@@ -125,11 +148,18 @@ char *trackToFile(int track)
 // invoking service constructor
 void initializeAccessory(HardwareSerial *dfPlayerSerial, const char *name, int defaultVolume, int numTracks)
 {
-    homeSpan.begin(Category::Other, name);
+    homeSpan.begin(Category::Fans, name);
 
     new SpanAccessory();
     new Service::AccessoryInformation();
     new Characteristic::Identify();
 
-    new BackgroundAudioPlayer(dfPlayerSerial, 5, numTracks);
+    // Create the background audio player and initialize DFPlayer
+    BackgroundAudioPlayer *audioPlayer = new BackgroundAudioPlayer(dfPlayerSerial, defaultVolume, numTracks);
+
+    // Add light service for play/pause and volume control
+    new AudioPlayerLight(&(audioPlayer->player), defaultVolume);
+
+    // Add fan service for track selection
+    new AudioPlayerFan(&(audioPlayer->player), numTracks, 1);
 }
