@@ -1,5 +1,19 @@
 # Background Audio Player
 
-## Pairing Code
+An ambient sound device for apple home powered by ESP32 and DFPlayer Pro
 
-`46637726`
+## Setup
+
+In monitor terminal:
+* Wait for device initialization to complete
+* Enter `W` then select the Wifi Network. Enter wifi password when prompted
+* Device will say that it is waiting to pair. 
+* In Apple Home app, click `+` to add a new device. Select `alternate methods`. The device should be there waiting. It will prompt you for a setup code. Enter `46637726`
+* Device should be ready to go
+
+## Tracks
+1. Tropical Night - Frogs, Crickets, Geckos. Recorded in southern Thailand.
+2. Tropical Rain - Heavy rain, also recorded in southern Thailand.
+3. Tropical Thunder - Rain with distant thunder
+4. Bamboo in the Wind - Creaking Bamboo in steady wind
+5. Coqui Frogs - Coqui Frogs at night, recorded on the Big Island of Hawaii

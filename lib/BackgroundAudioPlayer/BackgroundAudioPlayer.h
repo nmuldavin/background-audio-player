@@ -26,7 +26,6 @@ struct AudioPlayerFan : Service::Fan
 
     AudioPlayerFan(DFRobot_DF1201S *playerRef, int numTracks, int defaultTrack);
     boolean update();
-    int getTrackNumber();
     char *getTrackFile();
     void logNewState();
 };
@@ -44,6 +43,8 @@ struct BackgroundAudioPlayer
 };
 
 void initializeAccessory(HardwareSerial *dfPlayerSerial, const char *name, int defaultVolume, int numTracks);
+
+int getTrackNumber(int rotationSpeed, int numTracks);
 
 char *trackToFile(int track);
 

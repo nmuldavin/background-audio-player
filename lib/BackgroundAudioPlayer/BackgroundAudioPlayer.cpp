@@ -1,7 +1,7 @@
 #include "HomeSpan.h"
 #include "BackgroundAudioPlayer.h"
 
-const int VOLUME_STEPSIZE = 5;
+const int VOLUME_STEPSIZE = 4;
 
 // AudioPlayerLight implementation
 AudioPlayerLight::AudioPlayerLight(DFRobot_DF1201S *playerRef, int defaultVolume)
@@ -20,16 +20,22 @@ boolean AudioPlayerLight::update()
         if (on->getNewVal())
         {
             player->start();
+            LOG0("Playing\n");
         }
         else
         {
             player->pause();
+            LOG0("Pausing\n");
         }
     }
 
     if (volume->getNewVal() != volume->getVal())
     {
-        player->setVol(volume->getNewVal() / VOLUME_STEPSIZE);
+        int newVol = volume->getNewVal() / VOLUME_STEPSIZE;
+        player->setVol(newVol);
+        LOG0("Volume: ");
+        LOG0(newVol);
+        LOG0("\n");
     }
 
     return true;
@@ -55,42 +61,47 @@ AudioPlayerFan::AudioPlayerFan(DFRobot_DF1201S *playerRef, int numTracks, int de
 
 boolean AudioPlayerFan::update()
 {
-    if (rotationSpeed->getNewVal() != rotationSpeed->getVal())
+    if (getTrackNumber(rotationSpeed->getNewVal(), numTracks) != getTrackNumber(rotationSpeed->getVal(), numTracks))
     {
-        // Use playSpecFile with the actual file path
-        player->playSpecFile(String(trackToFile(getTrackNumber())));
-        logNewState();
+        int trackNum = getTrackNumber(rotationSpeed->getNewVal(), numTracks);
+
+        if (trackNum == 0)
+        {
+            player->pause();
+            LOG0("Pausing\n");
+        }
+        else
+        {
+            // Use playSpecFile with the actual file path
+            player->playSpecFile(String(trackToFile(trackNum)));
+
+            // Re-apply SINGLECYCLE mode after track change to ensure looping
+            player->setPlayMode(player->SINGLECYCLE);
+
+            logNewState();
+        }
     }
 
     return true;
 }
 
-int AudioPlayerFan::getTrackNumber()
+int getTrackNumber(int rotationSpeed, int numTracks)
 {
-    int speed = rotationSpeed->getNewVal();
     int stepSize = 100 / numTracks;
 
     // Convert rotation speed percentage to track number (1-based)
-    int trackNum = (speed / stepSize) + 1;
-
-    // Clamp to valid range
-    if (trackNum < 1)
-        trackNum = 1;
-    if (trackNum > numTracks)
-        trackNum = numTracks;
-
-    return trackNum;
+    return rotationSpeed / stepSize;
 }
 
 char *AudioPlayerFan::getTrackFile()
 {
-    return trackToFile(getTrackNumber());
+    return trackToFile(getTrackNumber(rotationSpeed->getNewVal(), numTracks));
 }
 
 void AudioPlayerFan::logNewState()
 {
     LOG0("Changing to track ");
-    LOG0(getTrackNumber());
+    LOG0(getTrackNumber(rotationSpeed->getNewVal(), numTracks));
     LOG0(" (rotation speed: ");
     LOG0(rotationSpeed->getNewVal());
     LOG0("%).\n");
@@ -144,8 +155,8 @@ void BackgroundAudioPlayer::initializeDFPlayer(HardwareSerial *dfPlayerSerial, i
     LOG0(player.getVol());
     LOG0("\n");
 
-    // Use ALLCYCLE instead of SINGLECYCLE to allow track changes
-    player.setPlayMode(player.ALLCYCLE);
+    // Use SINGLECYCLE to loop the current track indefinitely
+    player.setPlayMode(player.SINGLECYCLE);
 }
 
 char *trackToFile(int track)
