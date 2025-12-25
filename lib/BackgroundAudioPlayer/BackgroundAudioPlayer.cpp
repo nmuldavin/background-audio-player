@@ -1,13 +1,15 @@
 #include "HomeSpan.h"
 #include "BackgroundAudioPlayer.h"
 
+const int VOLUME_STEPSIZE = 5;
+
 // AudioPlayerLight implementation
 AudioPlayerLight::AudioPlayerLight(DFRobot_DF1201S *playerRef, int defaultVolume)
     : Service::LightBulb()
 {
     new Characteristic::ConfiguredName("Volume Control");
     on = new Characteristic::On(false);
-    volume = (new Characteristic::Brightness(defaultVolume * 5))->setRange(1, 100, 5);
+    volume = (new Characteristic::Brightness(defaultVolume * VOLUME_STEPSIZE))->setRange(0, 100, VOLUME_STEPSIZE);
     player = playerRef;
 }
 
@@ -18,7 +20,6 @@ boolean AudioPlayerLight::update()
         if (on->getNewVal())
         {
             player->start();
-            LOG0(player->getFileName());
         }
         else
         {
@@ -28,7 +29,7 @@ boolean AudioPlayerLight::update()
 
     if (volume->getNewVal() != volume->getVal())
     {
-        player->setVol(volume->getNewVal() / 5);
+        player->setVol(volume->getNewVal() / VOLUME_STEPSIZE);
     }
 
     return true;
@@ -56,7 +57,8 @@ boolean AudioPlayerFan::update()
 {
     if (rotationSpeed->getNewVal() != rotationSpeed->getVal())
     {
-        player->playSpecFile(getTrackFile());
+        // Use playSpecFile with the actual file path
+        player->playSpecFile(String(trackToFile(getTrackNumber())));
         logNewState();
     }
 
@@ -93,7 +95,10 @@ void AudioPlayerFan::logNewState()
     LOG0(rotationSpeed->getNewVal());
     LOG0("%).\n");
     LOG0("File name: ");
-    LOG0(trackToFile(getTrackNumber()));
+    LOG0(player->getFileName());
+    LOG0("\n");
+    LOG0("File number: ");
+    LOG0(player->getCurFileNumber());
     LOG0("\n");
 }
 
@@ -129,11 +134,18 @@ void BackgroundAudioPlayer::initializeDFPlayer(HardwareSerial *dfPlayerSerial, i
 
     player.setPrompt(false);
     player.setLED(false);
+    player.switchFunction(player.MUSIC);
+
+    // CRITICAL: Wait for mode switch to complete
+    delay(2000);
+
     player.setVol(defaultVolume);
     LOG0("Volume:");
     LOG0(player.getVol());
     LOG0("\n");
-    player.setPlayMode(player.SINGLECYCLE);
+
+    // Use ALLCYCLE instead of SINGLECYCLE to allow track changes
+    player.setPlayMode(player.ALLCYCLE);
 }
 
 char *trackToFile(int track)
