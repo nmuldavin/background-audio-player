@@ -4,7 +4,7 @@
 const int VOLUME_STEPSIZE = 4;
 
 // AudioPlayerLight implementation
-AudioPlayerLight::AudioPlayerLight(DFRobot_DF1201S *playerRef, int defaultVolume)
+AudioPlayerLight::AudioPlayerLight(DFRobotDFPlayerMini *playerRef, int defaultVolume)
     : Service::LightBulb()
 {
     new Characteristic::ConfiguredName("Volume Control");
@@ -32,7 +32,7 @@ boolean AudioPlayerLight::update()
     if (volume->getNewVal() != volume->getVal())
     {
         int newVol = volume->getNewVal() / VOLUME_STEPSIZE;
-        player->setVol(newVol);
+        player->volume(newVol);
         LOG0("Volume: ");
         LOG0(newVol);
         LOG0("\n");
@@ -42,7 +42,7 @@ boolean AudioPlayerLight::update()
 }
 
 // AudioPlayerFan implementation
-AudioPlayerFan::AudioPlayerFan(DFRobot_DF1201S *playerRef, int numTracks, int defaultTrack)
+AudioPlayerFan::AudioPlayerFan(DFRobotDFPlayerMini *playerRef, int numTracks, int defaultTrack)
     : Service::Fan()
 {
     new Characteristic::ConfiguredName("Track Selection");
@@ -72,11 +72,8 @@ boolean AudioPlayerFan::update()
         }
         else
         {
-            // Use playSpecFile with the actual file path
-            player->playSpecFile(String(trackToFile(trackNum)));
-
-            // Re-apply SINGLECYCLE mode after track change to ensure looping
-            player->setPlayMode(player->SINGLECYCLE);
+            // Use loop to play and loop the specified track
+            player->loop(trackNum);
 
             logNewState();
         }
@@ -105,11 +102,8 @@ void AudioPlayerFan::logNewState()
     LOG0(" (rotation speed: ");
     LOG0(rotationSpeed->getNewVal());
     LOG0("%).\n");
-    LOG0("File name: ");
-    LOG0(player->getFileName());
-    LOG0("\n");
-    LOG0("File number: ");
-    LOG0(player->getCurFileNumber());
+    LOG0("Current track: ");
+    LOG0(player->readCurrentFileNumber());
     LOG0("\n");
 }
 
@@ -129,7 +123,8 @@ void BackgroundAudioPlayer::initializeDFPlayer(HardwareSerial *dfPlayerSerial, i
 
     int startupCount = 1;
 
-    while (!this->player.begin(*dfPlayerSerial))
+    // Note: begin() parameters are (stream, isACK, doReset)
+    while (!this->player.begin(*dfPlayerSerial, true, true))
     {
         LOG0("DFPlayer connection attempt ");
         LOG0(startupCount);
@@ -143,20 +138,17 @@ void BackgroundAudioPlayer::initializeDFPlayer(HardwareSerial *dfPlayerSerial, i
     LOG0(startupCount);
     LOG0(" succeeded. Configuring settings.\n");
 
-    player.setPrompt(false);
-    player.setLED(false);
-    player.switchFunction(player.MUSIC);
+    // Set communication timeout
+    player.setTimeOut(500);
+    player.enableDAC();
 
-    // CRITICAL: Wait for mode switch to complete
-    delay(2000);
-
-    player.setVol(defaultVolume);
-    LOG0("Volume:");
-    LOG0(player.getVol());
+    // Set initial volume
+    player.volume(defaultVolume);
+    LOG0("Volume: ");
+    LOG0(defaultVolume);
     LOG0("\n");
 
-    // Use SINGLECYCLE to loop the current track indefinitely
-    player.setPlayMode(player.SINGLECYCLE);
+    // Note: No need to set play mode globally - loop() will handle it per track
 }
 
 char *trackToFile(int track)
